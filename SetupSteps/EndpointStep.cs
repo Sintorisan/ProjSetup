@@ -3,8 +3,7 @@ using Models;
 
 namespace SetupSteps;
 
-
-public class AuthStep : IProjectSetupStep
+public class EndpointStep : IProjectSetupStep
 {
     public void Execute(ProjectOptions opt)
     {

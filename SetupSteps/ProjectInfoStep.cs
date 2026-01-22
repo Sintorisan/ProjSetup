@@ -1,49 +1,86 @@
 using Enums;
 using Interfaces;
-using Microsoft.VisualBasic;
 using Models;
 using Spectre.Console;
+using UI;
 
 namespace SetupSteps;
 
 public class ProjectInfoStep : IProjectSetupStep
 {
+    private const SetupStep Step = SetupStep.ProjectInfo;
+    private const string Title = "Project Information";
+
     public void Execute(ProjectOptions options)
     {
-        AnsiConsole.Clear();
+        Redraw(options, "Basic settings for your Web API");
 
-        options.ProjectName = AnsiConsole.Ask<string>("Project name:");
-        options.ProjectPath = AskForProjectPath();
-        options.ApiType = AskForApiType();
-    }
-    private ApiType? AskForApiType()
-    {
-        AnsiConsole.Clear();
-        var type = AnsiConsole.Prompt(
-            new SelectionPrompt<ApiType>()
-            .Title("[bold]Choose API type: [/] ")
-            .AddChoices(Enum.GetValues<ApiType>()));
+        options.ProjectName = PromptProjectName();
+        Redraw(options);
 
-        return type;
+        options.ProjectPath = PromptProjectPath(options);
+        Redraw(options);
+
+        options.ApiType = PromptApiType();
     }
-    private string AskForProjectPath()
+
+    private void Redraw(ProjectOptions options, string? subtitle = null)
     {
+        UiComponents.Redraw(
+            options,
+            Step,
+            Title,
+            subtitle
+        );
+    }
+
+    private string PromptProjectName()
+    {
+        return AnsiConsole.Prompt(
+            new TextPrompt<string>("[bold green]> Project name[/]: ")
+                .PromptStyle("green")
+                .Validate(name =>
+                    string.IsNullOrWhiteSpace(name)
+                        ? ValidationResult.Error("[red]Project name is required[/]")
+                        : ValidationResult.Success())
+        );
+    }
+
+    private string PromptProjectPath(ProjectOptions options)
+    {
+        AnsiConsole.WriteLine();
+
         var basePath = Environment.CurrentDirectory;
 
         if (AnsiConsole.Confirm(
-                $"Add project to current directory?\n[grey]{basePath}[/]"))
+                $"[bold green]> Use current directory[/]?\n[grey]{basePath}[/]"))
         {
             return basePath;
         }
 
-        return BrowseDirectories(basePath);
+        return BrowseDirectories(options, basePath);
     }
-    private string BrowseDirectories(string startPath)
+
+    private ApiType PromptApiType()
+    {
+        AnsiConsole.WriteLine();
+
+        return AnsiConsole.Prompt(
+            new SelectionPrompt<ApiType>()
+                .Title("[bold green]> API type[/]:")
+                .HighlightStyle("cyan")
+                .AddChoices(Enum.GetValues<ApiType>())
+        );
+    }
+
+    private string BrowseDirectories(ProjectOptions options, string startPath)
     {
         var currentPath = startPath;
 
         while (true)
         {
+            Redraw(options, currentPath);
+
             var directories = Directory.GetDirectories(currentPath)
                 .Select(Path.GetFileName)
                 .OrderBy(name => name)
@@ -51,30 +88,27 @@ public class ProjectInfoStep : IProjectSetupStep
 
             var choices = new List<string>
             {
-                "[[Select this directory]]",
-                ".."
+                "[green]✔ Select this directory[/]",
+                "[grey]⬆ Parent directory[/]"
             };
 
             choices.AddRange(directories!);
-            choices.Add("[[Cancel]]");
+            choices.Add("[red]✖ Cancel[/]");
 
             var choice = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
-                    .Title($"Current directory:\n[grey]{currentPath}[/]")
+                    .Title("[bold green]> Choose directory[/]:")
+                    .HighlightStyle("cyan")
                     .AddChoices(choices)
             );
 
-            if (choice == "[[Select this directory]]")
-            {
+            if (choice.Contains("Select this directory"))
                 return currentPath;
-            }
 
-            if (choice == "[[Cancel]]")
-            {
+            if (choice.Contains("Cancel"))
                 return startPath;
-            }
 
-            if (choice == "..")
+            if (choice.Contains("Parent"))
             {
                 var parent = Directory.GetParent(currentPath);
                 if (parent != null)

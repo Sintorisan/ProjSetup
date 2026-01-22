@@ -9,5 +9,6 @@ namespace Models
 
         public ApiType? ApiType { get; set; }
         public ProjectStructure? Structure { get; set; }
+        public DatabaseOptions DbOptions { get; set; } = new();
     }
 }

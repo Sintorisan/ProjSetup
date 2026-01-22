@@ -8,23 +8,19 @@ namespace SetupSteps;
 
 public class ArchitectureStep : IProjectSetupStep
 {
+    private const SetupStep Step = SetupStep.Architecture;
+    private const string Title = "Architecture Setup";
+
     public void Execute(ProjectOptions opt)
     {
         if (opt.Structure == null)
-        {
             opt.Structure = CreateInitialStructure(opt);
-        }
 
         while (true)
         {
-            AnsiConsole.Clear();
-            UiComponents.RenderSummary(opt);
+            Redraw(opt, "Manage solution projects and folders");
 
-            var action = AnsiConsole.Prompt(
-                new SelectionPrompt<ArchitectureAction>()
-                    .Title("Architecture layer setup")
-                    .AddChoices(Enum.GetValues<ArchitectureAction>())
-            );
+            var action = PromptArchitectureAction();
 
             if (action == ArchitectureAction.Done)
                 break;
@@ -33,13 +29,41 @@ public class ArchitectureStep : IProjectSetupStep
         }
     }
 
+    private void Redraw(ProjectOptions options, string? subtitle = null)
+    {
+        UiComponents.Redraw(
+            options,
+            Step,
+            Title,
+            subtitle
+        );
+    }
+
+    private ArchitectureAction PromptArchitectureAction()
+    {
+        return AnsiConsole.Prompt(
+            new SelectionPrompt<ArchitectureAction>()
+                .Title("[bold green]> Choose action[/]:")
+                .HighlightStyle("cyan")
+                .AddChoices(Enum.GetValues<ArchitectureAction>())
+        );
+    }
+
     private ProjectStructure CreateInitialStructure(ProjectOptions opt)
     {
         var structure = new ProjectStructure();
 
-        var defaultFolders = opt.ApiType == ApiType.Controllers
-                ? new[] { "Controllers", "Properties" }
-                : new[] { "Properties" };
+        var defaultFolders =
+            opt.ApiType == ApiType.Controllers
+                ? new[]
+                {
+                    new Folder { Name = "Controllers" },
+                    new Folder { Name = "Properties" }
+                }
+                : new[]
+                {
+                    new Folder { Name = "Properties" }
+                };
 
         structure.Layers.Add(new Node
         {
@@ -60,11 +84,11 @@ public class ArchitectureStep : IProjectSetupStep
                 break;
 
             case ArchitectureAction.Remove:
-                RemoveNode(opt.Structure);
+                RemoveNode(opt);
                 break;
 
             case ArchitectureAction.Rename:
-                RenameNode(opt.Structure);
+                RenameNode(opt);
                 break;
 
             case ArchitectureAction.Inspect:
@@ -75,25 +99,30 @@ public class ArchitectureStep : IProjectSetupStep
 
     private void CreateNode(ProjectOptions opt)
     {
+        Redraw(opt, "Add project");
+
         var layerType = AnsiConsole.Prompt(
             new SelectionPrompt<LayerType>()
-                .Title("Select layer type")
+                .Title("[bold green]> Layer type[/]:")
+                .HighlightStyle("cyan")
                 .AddChoices(Enum.GetValues<LayerType>())
         );
 
-        var name = $"{opt.ProjectName}.{layerType}";
+        var defaultName = $"{opt.ProjectName}.{layerType}";
+        var name = defaultName;
 
-        if (!AnsiConsole.Confirm($"Keep layer name?\n[grey]{name}[/]"))
+        if (!AnsiConsole.Confirm(
+                $"[bold green]> Keep default name[/]?\n[grey]{defaultName}[/]"))
         {
-            name = AnsiConsole.Ask<string>($"New name for {layerType} layer: ") + $".{layerType}";
+            name = PromptName("Layer name") + $".{layerType}";
         }
 
-        if (opt.Structure.Layers.Any(l => l.Name == name))
+        if (opt.Structure!.Layers.Any(l => l.Name == name))
         {
-            AnsiConsole.MarkupLine("[red]A project with that name already exists[/]");
+            AnsiConsole.MarkupLine("[red]Project already exists[/]");
+            Console.ReadKey();
             return;
         }
-
 
         opt.Structure.Layers.Add(new Node
         {
@@ -103,59 +132,59 @@ public class ArchitectureStep : IProjectSetupStep
         });
     }
 
-    private void RemoveNode(ProjectStructure structure)
+    private void RemoveNode(ProjectOptions opt)
     {
-        var removable = structure.Layers
+        Redraw(opt, "Remove project");
+
+        var removable = opt.Structure!.Layers
             .Where(l => l.Type != ProjectType.Api)
             .ToList();
 
         if (!removable.Any())
         {
-            AnsiConsole.MarkupLine("[yellow]No removable projects available[/]");
+            AnsiConsole.MarkupLine("[yellow]No removable projects[/]");
+            Console.ReadKey();
             return;
         }
 
-        var node = AnsiConsole.Prompt(
-            new SelectionPrompt<Node>()
-                .Title("Select project to remove")
-                .UseConverter(n => n.Name)
-                .AddChoices(removable)
-        );
+        var node = PromptSelectNode(removable, "Select project");
 
-        if (AnsiConsole.Confirm($"Remove [red]{node.Name}[/]?"))
-        {
-            structure.Layers.Remove(node);
-        }
+        if (AnsiConsole.Confirm($"[red]Remove[/] {node.Name}?"))
+            opt.Structure.Layers.Remove(node);
     }
 
-    private void RenameNode(ProjectStructure structure)
+    private void RenameNode(ProjectOptions opt)
     {
-        var node = PromptSelectNode(structure, "Select project to rename");
+        Redraw(opt, "Rename project");
 
-        var newName = PromptFolderName(
-            $"New name for {node.Name}:"
+        var node = PromptSelectNode(
+            opt.Structure!.Layers,
+            "Select project"
         );
 
+        var newName = PromptName($"New name for {node.Name}");
+
         if (node.Type == ProjectType.Api && !newName.EndsWith(".API"))
-        {
             newName += ".API";
-        }
 
         node.Name = newName;
     }
 
     private void InspectNode(ProjectOptions opt)
     {
-        var node = PromptSelectNode(opt.Structure, "Inspect project");
+        var node = PromptSelectNode(
+            opt.Structure!.Layers,
+            "Inspect project"
+        );
 
         while (true)
         {
-            AnsiConsole.Clear();
-            UiComponents.RenderSummary(opt);
+            Redraw(opt, $"Inspecting {node.Name}");
 
             var action = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
-                    .Title($"Inspecting [bold]{node.Name}[/]")
+                    .Title("[bold green]> Folder action[/]:")
+                    .HighlightStyle("cyan")
                     .AddChoices(
                         "Add folder",
                         "Rename folder",
@@ -167,65 +196,80 @@ public class ArchitectureStep : IProjectSetupStep
             if (action == "Back")
                 break;
 
-            switch (action)
-            {
-                case "Add folder":
-                    var folderName = PromptFolderName("Folder name:");
-                    node.Folders.Add(folderName);
-                    break;
-
-                case "Rename folder":
-                    if (!node.Folders.Any())
-                        break;
-
-                    var old = AnsiConsole.Prompt(
-                        new SelectionPrompt<string>()
-                            .Title("Select folder")
-                            .AddChoices(node.Folders)
-                    );
-
-                    var renamed = PromptFolderName("New folder name:");
-                    node.Folders[node.Folders.IndexOf(old)] = renamed;
-                    break;
-
-                case "Remove folder":
-                    if (!node.Folders.Any())
-                        break;
-
-                    var folder = AnsiConsole.Prompt(
-                        new SelectionPrompt<string>()
-                            .Title("Select folder to remove")
-                            .AddChoices(node.Folders)
-                    );
-
-                    if (AnsiConsole.Confirm($"Remove folder {folder}?"))
-                        node.Folders.Remove(folder);
-                    break;
-            }
+            HandleFolderAction(action, node);
         }
-
     }
 
-    private Node PromptSelectNode(ProjectStructure structure, string title)
+    private void HandleFolderAction(string action, Node node)
+    {
+        switch (action)
+        {
+            case "Add folder":
+                var name = PromptName("Folder name");
+
+                if (node.Folders.Any(f => f.Name == name))
+                {
+                    AnsiConsole.MarkupLine("[red]Folder already exists[/]");
+                    Console.ReadKey();
+                    return;
+                }
+
+                node.Folders.Add(new Folder { Name = name });
+                break;
+
+            case "Rename folder":
+                if (!node.Folders.Any())
+                    return;
+
+                var folder = PromptSelectFolder(node, "Select folder");
+                folder.Name = PromptName("New folder name");
+                break;
+
+            case "Remove folder":
+                if (!node.Folders.Any())
+                    return;
+
+                var remove = PromptSelectFolder(node, "Select folder");
+
+                if (AnsiConsole.Confirm($"Remove {remove.Name}?"))
+                    node.Folders.Remove(remove);
+                break;
+        }
+    }
+
+    private Node PromptSelectNode(
+        IEnumerable<Node> nodes,
+        string title)
     {
         return AnsiConsole.Prompt(
             new SelectionPrompt<Node>()
-                .Title(title)
+                .Title($"[bold green]> {title}[/]:")
                 .UseConverter(n => n.Name)
-                .AddChoices(structure.Layers)
+                .HighlightStyle("cyan")
+                .AddChoices(nodes)
         );
     }
 
-    private string PromptFolderName(string title)
+    private Folder PromptSelectFolder(Node node, string title)
     {
         return AnsiConsole.Prompt(
-            new TextPrompt<string>(title)
+            new SelectionPrompt<Folder>()
+                .Title($"[bold green]> {title}[/]:")
+                .UseConverter(f => f.Name)
+                .HighlightStyle("cyan")
+                .AddChoices(node.Folders)
+        );
+    }
+
+    private string PromptName(string label)
+    {
+        return AnsiConsole.Prompt(
+            new TextPrompt<string>($"[bold green]> {label}[/]: ")
+                .PromptStyle("green")
                 .Validate(name =>
                     string.IsNullOrWhiteSpace(name)
                         ? ValidationResult.Error("[red]Name cannot be empty[/]")
-                        : ValidationResult.Success()
-                )
+                        : ValidationResult.Success())
         );
     }
-
 }
