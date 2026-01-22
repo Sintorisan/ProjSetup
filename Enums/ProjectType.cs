@@ -1,7 +1,7 @@
 namespace Enums;
 
-public enum ApiType
+public enum ProjectType
 {
-    Minimal,
-    Controllers
+    Api,
+    ClassLibrary
 }

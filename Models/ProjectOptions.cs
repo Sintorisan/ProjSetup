@@ -8,11 +8,6 @@ namespace Models
         public string ProjectPath { get; set; } = string.Empty;
 
         public ApiType? ApiType { get; set; }
-        public List<Node> Structure { get; set; } = new();
-
-        public void Build()
-        {
-
-        }
+        public ProjectStructure? Structure { get; set; }
     }
 }
